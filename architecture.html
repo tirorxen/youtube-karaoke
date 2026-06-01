@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🎤 YouTube 卡拉 OK — 系統架構</title>
+<style>
+  :root {
+    --bg: #0f1320; --panel: #161c2f; --panel2: #1d2540; --line: #2a3450;
+    --text: #e8ecf7; --dim: #8d97b3; --gold: #ffce4d; --ok: #3ecf8e;
+    --warn: #ff8a3d; --info: #6aa6ff; --danger: #ff5d6c; --spotify: #1db954;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 24px 60px; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Noto Sans TC", system-ui, sans-serif;
+    max-width: 1180px; margin-inline: auto; line-height: 1.55;
+  }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 32px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 18px 0 6px; color: var(--gold); }
+  .lead { color: var(--dim); margin: 6px 0 20px; }
+  code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px; font-size: 0.95em; }
+
+  .grid3 { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 14px; margin: 16px 0; }
+  @media (max-width: 920px) { .grid3 { grid-template-columns: 1fr; } }
+
+  .actor {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .actor h3 { margin-top: 0; color: var(--info); display: flex; align-items: center; gap: 8px; font-size: 17px; }
+  .actor .who { color: var(--dim); font-size: 12px; margin-bottom: 8px; }
+  .actor ul { margin: 4px 0 0 18px; padding: 0; color: var(--text); font-size: 13px; }
+  .actor li { margin: 2px 0; }
+  .actor.center h3 { color: var(--gold); }
+  .actor.stage h3 { color: var(--ok); }
+
+  .channels {
+    background: var(--panel2); border: 1px dashed var(--line); border-radius: 10px;
+    padding: 10px 14px; margin: 6px 0; font-size: 13px; color: var(--dim);
+    display: flex; gap: 18px; flex-wrap: wrap;
+  }
+  .channels b { color: var(--text); font-weight: 700; }
+
+  pre.diagram {
+    background: #0a0d18; border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; overflow-x: auto;
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+    font-size: 12.5px; line-height: 1.5; color: var(--text);
+    white-space: pre;
+  }
+  pre.diagram .em { color: var(--gold); font-weight: 700; }
+  pre.diagram .arr { color: var(--info); }
+  pre.diagram .dim { color: var(--dim); }
+  pre.diagram .ok { color: var(--ok); }
+  pre.diagram .warn { color: var(--warn); }
+  pre.diagram .spot { color: var(--spotify); font-weight: 700; }
+
+  .endpoints {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0;
+  }
+  @media (max-width: 720px) { .endpoints { grid-template-columns: 1fr; } }
+  .ep {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 12px; font-size: 13px;
+  }
+  .ep code { color: var(--gold); font-family: inherit; font-weight: 600; }
+  .ep .desc { color: var(--dim); display: block; margin-top: 2px; font-size: 12px; }
+
+  table.timeline { width: 100%; border-collapse: collapse; margin: 8px 0; }
+  table.timeline td { padding: 6px 10px; vertical-align: top; border-bottom: 1px solid var(--line); font-size: 13px; }
+  table.timeline td:first-child { color: var(--gold); font-family: monospace; white-space: nowrap; width: 92px; }
+  table.timeline td:nth-child(2) { color: var(--dim); width: 130px; }
+
+  .stores {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 8px 0;
+  }
+  .store {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font-size: 13px;
+  }
+  .store h4 { margin: 0 0 4px; font-size: 14px; color: var(--gold); }
+  .store .what { color: var(--dim); font-size: 12px; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--dim); margin: 8px 0; }
+  .legend span { display: inline-flex; gap: 6px; align-items: center; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot.gold { background: var(--gold); }
+  .dot.info { background: var(--info); }
+  .dot.ok { background: var(--ok); }
+  .dot.warn { background: var(--warn); }
+  .dot.spot { background: var(--spotify); }
+
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--dim); font-size: 12px; }
+  a { color: var(--gold); }
+</style>
+</head>
+<body>
+
+<h1>🎤 YouTube 卡拉 OK — 系統架構</h1>
+<p class="lead">
+  React PWA + 本地 Node backend，三裝置即時協作：手機遙控 / 筆電控制台 / 電視全螢幕。
+  支援 Spotify 公開歌單匯入、demucs ML 去人聲、PWA app mode 全螢幕。
+</p>
+
+<h2>三個角色</h2>
+<div class="grid3">
+  <div class="actor">
+    <h3>📱 PHONE（任何瀏覽器）</h3>
+    <div class="who">沙發遙控器；同網域 WiFi</div>
+    <ul>
+      <li><code>http://&lt;LAN_IP&gt;:5174/remote</code></li>
+      <li>搜尋 YT（CC 偵測標記）</li>
+      <li>歌單 / 插播 / 重排 / 立即播放</li>
+      <li>導唱值 chip（樂觀 UI）</li>
+      <li>⏪ -10s / ⏯ / ⏩ +10s / 🔄 重頭 / ⏭ 切歌</li>
+      <li>📺 舞台 / 📋 下一首側欄</li>
+      <li>📚 過去歌單載入</li>
+      <li>🎶 <b>Spotify 公開歌單匯入 wizard</b></li>
+      <li>🎵 lrclib 重抓歌詞</li>
+      <li>看 demucs % + ETA + ready 慶祝</li>
+    </ul>
+  </div>
+  <div class="actor center">
+    <h3>💻 LAPTOP DASHBOARD（控制台 + 出聲）</h3>
+    <div class="who">React PWA, vite dev: 5173 / 桌面捷徑開為 standalone app mode</div>
+    <ul>
+      <li>PlaybackScreen + Web Audio worklets</li>
+      <li>AudioContext singleton（vocal / pitch / mixer）</li>
+      <li>3 個 audio elements：A=原曲、B=demucs 伴奏、C=demucs 人聲</li>
+      <li>localStorage 6 個 stores（settings/queue/history/played/recent）</li>
+      <li>是「唯一播放權威」：應用所有命令</li>
+      <li>裝 PWA 後 window.open 自動 app mode（無 chrome）</li>
+    </ul>
+  </div>
+  <div class="actor stage">
+    <h3>📺 STAGE WINDOW（拖到 TV）</h3>
+    <div class="who">獨立 popup；PWA mode 自動無 chrome</div>
+    <ul>
+      <li><code>/stage.html</code>（同源、static）</li>
+      <li>video(muted) + 字幕 + demucs HUD</li>
+      <li><b>右側側欄</b>：下一首 + 接下來 3-5 首 + prefetch 狀態</li>
+      <li>結尾 30s 自動跳出側欄</li>
+      <li>F11 / ⛶ 真．全螢幕；PWA 模式不需要</li>
+      <li>主畫面廣播 → 立刻同步</li>
+    </ul>
+  </div>
+</div>
+
+<h2>通訊軌</h2>
+<div class="channels">
+  <span><span class="dot gold"></span><b>REST 同步</b>：phone ↔ backend（state 1.5s + commands 1.2s）</span>
+  <span><span class="dot info"></span><b>BroadcastChannel("karaoke-stage")</b>：dashboard ↔ stage（即時，同源限制）</span>
+  <span><span class="dot ok"></span><b>內部 fetch</b>：dashboard ↔ backend（音檔 / 字幕 / demucs）</span>
+  <span><span class="dot spot"></span><b>Spotify embed scraping</b>：backend → open.spotify.com（無 credentials）</span>
+</div>
+
+<pre class="diagram">
+<span class="dim">┌─────────────────┐   ┌──────────────────────────────┐   ┌─────────────────┐
+│</span> <span class="em">📱 PHONE</span>        <span class="dim">│   │</span> <span class="em">💻 LAPTOP DASHBOARD</span>          <span class="dim">│   │</span> <span class="em">📺 STAGE WINDOW</span>  <span class="dim">│
+│ (any browser)   │   │ React + Web Audio + 6 stores │   │ /stage.html     │
+└────────┬────────┘   └────┬─────────────┬───────────┘   └────────┬────────┘
+         │</span> REST<span class="arr">───────►</span><span class="dim">│             │</span> <span class="info">BroadcastChannel</span><span class="dim">│
+         │</span> <span class="dim">(1.2-1.5s polling)         │             │</span> <span class="info">"karaoke-stage"</span> <span class="dim">│
+         │                            │             │             ▲
+         │                            │             └──songChange─┤
+         │                            │             ◄──hello──────┘
+         │                            ▼                           │
+         │            </span>fetch /api/youtube/*<span class="dim"> + /api/spotify/*         │
+         │                            │                           │
+         ▼                            ▼                           ▼</span>
+<span class="dim">┌─────────────────────────────────────────────────────────────────────────┐
+│</span> <span class="em">🌐 EXPRESS BACKEND（localhost:5174）</span>                                <span class="dim">│
+│  </span>YouTube                          Spotify                              <span class="dim">│
+│  </span><span class="ok">/api/youtube/quick</span>        <span class="dim">     </span><span class="spot">/api/spotify/playlist</span><span class="dim">                  │
+│  </span><span class="ok">/api/youtube/visual</span>            <span class="spot">/api/spotify/match-yt</span><span class="dim">                  │
+│  </span><span class="ok">/api/youtube/instrumental</span>                                            <span class="dim">│
+│  </span><span class="ok">/api/youtube/vocals</span>           Remote control                        <span class="dim">│
+│  </span><span class="ok">/api/youtube/search</span>           <span class="ok">/api/remote/state</span><span class="dim"> (GET/POST)             │
+│  </span><span class="ok">/api/youtube/progress</span>         <span class="ok">/api/remote/command</span><span class="dim"> (POST)               │
+│  </span><span class="ok">/api/youtube/captions</span>         <span class="ok">/api/remote/commands</span><span class="dim"> (drain)             │
+│  </span><span class="ok">/api/youtube/stream</span>           <span class="ok">/api/remote/info</span><span class="dim"> (LAN URLs)             │
+│  </span>                                <span class="ok">/remote</span><span class="dim"> (手機 HTML)                    │
+│  </span>Cache 管理                                                            <span class="dim">│
+│  </span><span class="ok">/api/cache/info</span><span class="dim">                 GPU                                  │
+│  </span><span class="ok">/api/cache/clear</span><span class="dim">                自動偵測 CUDA + VRAM 門檻 → 決定 -d   │
+└──┬─────────────┬───────────┬───────────────────────────────────┬─────────┘
+   │             │           │                                   │
+   ▼             ▼           ▼                                   ▼
+┌───────┐ ┌───────┐ ┌──────────────────────────────────┐ ┌─────────────────┐
+│</span>yt-dlp <span class="dim">│ │</span>ffmpeg <span class="dim">│ │</span> <span class="em">demucs (PyTorch CUDA / CPU)</span>      <span class="dim">│ │</span><span class="spot">open.spotify.com</span><span class="dim">│
+│ </span>抓串流  <span class="dim">│ │</span> 轉碼   <span class="dim">│ │</span> --two-stems=vocals --mp3        <span class="dim">│ │</span>embed scraping  <span class="dim">│
+│ </span>+ CC 偵測<span class="dim">│ │</span>       <span class="dim">│ │</span> VRAM&lt;3GB / CC&lt;5 退回 CPU         <span class="dim">│ │</span>無需 credentials <span class="dim">│
+└───────┘ └───────┘ └──────────────────────────────────┘ └─────────────────┘</span>
+</pre>
+
+<h2>本地 Stores（localStorage 持久化）</h2>
+
+<div class="stores">
+  <div class="store">
+    <h4>useSettings</h4>
+    <div class="what">導唱值、pitch、bufferSize、demucsModel、自動 demucs 開關、麥克風來源、mic alignment 等</div>
+  </div>
+  <div class="store">
+    <h4>useQueue</h4>
+    <div class="what">當前歌單 items + prefetch 狀態 map</div>
+  </div>
+  <div class="store">
+    <h4>useQueueHistory</h4>
+    <div class="what">命名 snapshots + auto_latest（每次歌單變動 5s debounce 自動覆寫）</div>
+  </div>
+  <div class="store">
+    <h4>usePlayedHistory</h4>
+    <div class="what">所有唱過的歌（cap 500），含 playCount、lastPlayedTs；pickRandom Fisher-Yates 給隨機推薦</div>
+  </div>
+  <div class="store">
+    <h4>useRecent</h4>
+    <div class="what">最近播放（cap 10），給空狀態頁卡片用</div>
+  </div>
+</div>
+
+<h2>Web Audio 圖（dashboard tab）</h2>
+
+<p class="lead">
+  3 個 audio element 各對一個 GainNode（同 element 永遠對同一個 slot —— 避免 Web Audio
+  禁止重複 createMediaElementSource 的限制）。Track-A 走 vocalNode 做三頻段去人聲；
+  Track-B/C 是 demucs 已分離乾淨的軌，直接 bypass 接 pitchNode。
+</p>
+
+<pre class="diagram">
+audioA <span class="dim">(原曲/普通)</span>  ─► sourceA ─► <span class="em">gainA</span> ─► <span class="em">vocalNode</span> <span class="arr">───┐</span>
+                                       <span class="dim">(三頻段)</span>           <span class="arr">├─►</span> <span class="em">pitchNode</span> ─► <span class="em">mixerNode</span> ─► destination
+audioB <span class="dim">(demucs 伴奏)</span>  ─► sourceB ─► <span class="em">gainB</span> <span class="arr">───────────────────┤</span>           <span class="dim">(雙讀頭</span>          <span class="dim">▲</span>
+                                                       <span class="arr">│</span>            <span class="dim">delay-line)</span>      <span class="arr">│</span>
+audioC <span class="dim">(demucs 人聲)</span>  ─► sourceC ─► <span class="em">gainC</span> <span class="arr">───────────────────┘</span>                            <span class="arr">│</span>
+                                                                                          <span class="arr">│</span> mic input 1
+micStream ─► micSource ──────────────────────────────────────────────────────────────────<span class="arr">┘</span>
+
+<span class="ok">demucsMode === false （三頻段模式）：</span>
+  gainA = 1, gainB = 0, gainC = 0
+  guideVocalLevel → vocalNode <span class="dim">("set-guide-vocal")</span>
+
+<span class="ok">demucsMode === true （demucs 雙軌模式）：</span>
+  gainA = 0（靜音，但仍是主時鐘），gainB = 1（伴奏滿），gainC = guideVocalLevel（人聲）
+  → 真・KTV 導唱：0% 純伴奏，100% 原曲，30% 跟唱
+</pre>
+
+<h2>典型一首歌時間軸</h2>
+
+<table class="timeline">
+  <tr><td>T+0:00</td><td>使用者貼 YT URL</td><td>parseId → fetchQuick</td></tr>
+  <tr><td>T+0:01</td><td>backend</td><td>yt-dlp <code>--dump-single-json</code>（meta + captions + 偵測原文 lang）</td></tr>
+  <tr><td>T+0:10</td><td>dashboard</td><td>audio m4a → audioA.play()，三頻段可唱；usePlayedHistory.recordPlay</td></tr>
+  <tr><td>T+0:10</td><td>並行</td><td>HEAD <code>/api/youtube/instrumental</code> 觸發 demucs；fetch <code>/visual</code></td></tr>
+  <tr><td>T+0:30</td><td>visual 完成</td><td>video element 接上、currentTime sync 到 audio（stage 開啟時 pause）</td></tr>
+  <tr><td>T+1:30</td><td>demucs 完成</td><td>同時產生 <code>${id}.nv-htdemucs.m4a</code> 與 <code>${id}.vox-htdemucs.m4a</code></td></tr>
+  <tr><td>T+1:30</td><td>dashboard</td><td>audioB.src + audioC.src → canplaythrough → <code>crossfadeToDemucs(250ms)</code></td></tr>
+  <tr><td>之後</td><td>導唱 chip</td><td>切到任意 % → <code>gainC = guideVocalLevel</code>（60ms ramp）</td></tr>
+  <tr><td>歌單</td><td>背景</td><td>QueuePrefetcher 一首一首 HEAD instrumental → 排隊歌也都 cache 好</td></tr>
+  <tr><td>queue 變動</td><td>5s 後</td><td>useQueueHistory.autoSave → 「📌 上一次的歌單」snapshot 永遠最新</td></tr>
+</table>
+
+<h2>Spotify 匯入時間軸</h2>
+
+<table class="timeline">
+  <tr><td>T+0:00</td><td>使用者貼 spotify 分享連結</td><td>parseSpotifyPlaylistId 抽 22 字元 ID</td></tr>
+  <tr><td>T+0:01</td><td>backend</td><td>fetch <code>https://open.spotify.com/embed/playlist/&lt;id&gt;</code></td></tr>
+  <tr><td>T+0:03</td><td>解析</td><td>parse <code>__NEXT_DATA__</code> JSON，遞迴 walk 找 <code>trackList</code></td></tr>
+  <tr><td>T+0:03</td><td>回前端</td><td>跳出 checkbox 列表，預設前 30 勾選</td></tr>
+  <tr><td>T+30s</td><td>使用者勾完</td><td>POST <code>/api/spotify/match-yt</code> 含 tracks 陣列</td></tr>
+  <tr><td>T+30s</td><td>backend</td><td>mapWithLimit(3) 平行對每首跑 ytdlpSearch + 評分</td></tr>
+  <tr><td>T+1:00-2:00</td><td>結果</td><td>30 首約 1-2 分鐘，回 [&#123;videoId, title, hasCaptions&#125;...]</td></tr>
+  <tr><td>T+2:00</td><td>確認</td><td>使用者按「全部加入歌單」→ sendCmd("enqueueBatch") 一次送 → dashboard for-loop enqueue</td></tr>
+  <tr><td>T+2:00</td><td>背景</td><td>QueuePrefetcher 自動排隊跑 demucs，第一首唱完前後面幾首已 ready</td></tr>
+</table>
+
+<h2>主要 endpoints</h2>
+
+<h3>YouTube 三階段</h3>
+<div class="endpoints">
+  <div class="ep"><code>GET /api/youtube/quick?url=</code><span class="desc">階段 1：5-15 秒回 audioUrl + captionsUrl + visualUrl + captionTracks + 自動挑 lang</span></div>
+  <div class="ep"><code>GET /api/youtube/visual?id=</code><span class="desc">階段 2：video-only mp4，背景拉</span></div>
+  <div class="ep"><code>GET /api/youtube/instrumental?id=&model=</code><span class="desc">階段 3a：demucs 伴奏 m4a</span></div>
+  <div class="ep"><code>GET /api/youtube/vocals?id=&model=</code><span class="desc">階段 3b：demucs 人聲 m4a（與 instrumental 同 job）</span></div>
+  <div class="ep"><code>GET /api/youtube/search?q=</code><span class="desc">yt-dlp ytsearchN + 平行 CC 偵測</span></div>
+  <div class="ep"><code>GET /api/youtube/progress?id=&model=</code><span class="desc">demucs 即時進度 + ETA</span></div>
+  <div class="ep"><code>GET /api/youtube/captions?id=&lang=</code><span class="desc">YouTube CC（vtt），多語 fallback</span></div>
+</div>
+
+<h3>🎶 Spotify 公開歌單</h3>
+<div class="endpoints">
+  <div class="ep"><code>GET /api/spotify/playlist?url=</code><span class="desc">embed scraping 抓歌單 trackList（無需 credentials）</span></div>
+  <div class="ep"><code>POST /api/spotify/match-yt</code><span class="desc">餵 tracks[]，每首跑 ytsearch + 評分挑 best 回 [&#123;videoId, hasCaptions&#125;...]</span></div>
+</div>
+
+<h3>手機遙控</h3>
+<div class="endpoints">
+  <div class="ep"><code>GET /remote</code><span class="desc">送 server/remote.html</span></div>
+  <div class="ep"><code>POST /api/remote/state</code><span class="desc">dashboard 推狀態（含 snapshots + upcoming + hqProgress）</span></div>
+  <div class="ep"><code>GET /api/remote/state</code><span class="desc">phone 拉狀態</span></div>
+  <div class="ep"><code>POST /api/remote/command</code><span class="desc">phone 送指令（enqueueBatch / loadSnapshot / guide / skip / sidebarToggle...）</span></div>
+  <div class="ep"><code>GET /api/remote/commands</code><span class="desc">dashboard 取走指令</span></div>
+  <div class="ep"><code>GET /api/remote/info</code><span class="desc">LAN URLs（QR 用）</span></div>
+</div>
+
+<h3>暫存檔管理</h3>
+<div class="endpoints">
+  <div class="ep"><code>GET /api/cache/info</code><span class="desc">cache 大小 / 檔數 / 路徑</span></div>
+  <div class="ep"><code>POST /api/cache/clear</code><span class="desc">一鍵清空</span></div>
+</div>
+
+<h2>關鍵設計取捨</h2>
+
+<ul>
+  <li><b>單一播放權威</b>：dashboard 是唯一寫者；phone 只送命令、看狀態 → 不會有衝突</li>
+  <li><b>3 個 audio elements 永久綁定 3 個 slot</b>：避免 Web Audio 對同元素二次
+    <code>createMediaElementSource</code> 報錯</li>
+  <li><b>demucs 共用 job</b>：HEAD /instrumental 觸發分離；GET /vocals 走同一個 inflight promise</li>
+  <li><b>stale callback guard</b>：切歌時用 <code>currentVideoIdRef</code> 標記，上一首 demucs 跑完
+    的 callback resume 時偵測歌已換 → 放棄套用</li>
+  <li><b>樂觀 UI（手機）</b>：按下 → 立即金色脈動 → server 確認後實心 → 3s 沒回確認則 revert</li>
+  <li><b>舞台用新視窗 + BroadcastChannel</b>：dashboard CSS-hide 無法繞 OS 視窗邊界，
+    獨立 popup 可全螢幕</li>
+  <li><b>PWA install 是真正的全螢幕解</b>：安裝後 window.open 自動 app mode（無 chrome），
+    完全繞過 requestFullscreen API 的 user activation 限制</li>
+  <li><b>GPU 算力門檻</b>：VRAM &lt; 3GB 或 CC &lt; 5.0 → demucs 強制走 CPU（避免 OOM 或 swap thrash）</li>
+  <li><b>Cache 持久化 + 跳出 OneDrive + 避開 CJK 路徑</b>：CACHE_DIR = <code>~/.karaoke-cache</code>
+    （demucs Python 在 Windows 對 CJK 路徑超脆弱，必須避開）</li>
+  <li><b>Spotify embed scraping &gt; Web API</b>：API 自從 2024-11 起需要 owner Premium，
+    embed 頁面內嵌的 <code>__NEXT_DATA__</code> JSON 含完整 trackList，無需 credentials</li>
+  <li><b>auto-save queue debounce 5s</b>：每次歌單變動寫 <code>auto_latest</code> snapshot，
+    瀏覽器當掉/不小心清空都救得回來</li>
+</ul>
+
+<h2>掉過的坑</h2>
+
+<ul>
+  <li><b>requestAnimationFrame 在背景 tab 被凍結</b>（Chrome 88+）→ demucs 完成 callback
+    用 rAF 等 frame 就永遠不跑 → 改成同步 crossfade</li>
+  <li><b>切歌時 setVideoId(null) 廣播 null 到 stage</b> → stage 清空 video.src 顯示 placeholder
+    → guard <code>if (!videoId &amp;&amp; !title) return</code></li>
+  <li><b>position handler 只在 paused 狀態變化時 v.play()</b> → 若 v.src 還在 load 失敗就再也不 retry
+    → 改成「每次都校正」+ canplay handler 自動 play</li>
+  <li><b>BroadcastChannel onmessage handler 在 [] effect 裡 closure 抓 stale state</b>
+    → broadcastDataRef 鏡像最新 state</li>
+  <li><b>Dashboard + stage 兩個 video element 同解 H.264</b> → GPU 雙倍負擔 + demucs 搶資源 →
+    stage 開啟時 dashboard video.pause()</li>
+  <li><b>YouTube auto-translate 把英文歌翻成爛中文 CC</b> → detectOriginalLang 偵測原文 +
+    pickBestCaptionLang 只用原文 manual / auto，絕不 fallback 到 auto 翻譯版</li>
+</ul>
+
+<footer>
+  本系統僅供個人使用；請勿用於商業營運或重新散布 YouTube 內容。
+  使用 yt-dlp 抽 YouTube 串流違反 YouTube 服務條款第 III.E.4 條，個人本機使用通常不被追究，
+  但禁止任何形式的散布。
+</footer>
+
+</body>
+</html>

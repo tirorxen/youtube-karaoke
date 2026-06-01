@@ -1,0 +1,36 @@
+{
+  "name": "youtube-karaoke-react",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "server": "node server/server.mjs",
+    "start": "concurrently -k -n web,api -c blue,magenta \"npm:dev\" \"npm:server\"",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@mui/joy": "^5.0.0-beta.36",
+    "@emotion/react": "^11.11.4",
+    "@emotion/styled": "^11.11.5",
+    "express": "^4.19.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "soundtouchjs": "^0.1.30",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5",
+    "vite": "^5.3.1",
+    "vite-plugin-pwa": "^0.20.0",
+    "vitest": "^1.6.0",
+    "jsdom": "^24.1.0"
+  }
+}

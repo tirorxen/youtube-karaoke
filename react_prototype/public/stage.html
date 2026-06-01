@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#000000" />
+<title>🎤 卡拉OK 舞台</title>
+<style>
+  :root { --gold:#ffce4d; --gold-d:#b8902f; --ok:#3ecf8e; --danger:#ff5d6c; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #000; color: #fff;
+    font-family: -apple-system, "Segoe UI", "Noto Sans TC", system-ui, sans-serif;
+    overflow: hidden; height: 100vh;
+    user-select: none;
+  }
+  .stage { position: fixed; inset: 0; display: flex; flex-direction: row; }
+  .stage-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .video-area { flex: 1; position: relative; background: #000; min-height: 0; }
+  .video-area video {
+    width: 100%; height: 100%; object-fit: contain; background: #000;
+    display: block;
+  }
+  .video-area .placeholder {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px; color: rgba(255,255,255,0.5);
+  }
+  .lyrics-area {
+    flex: 0 0 auto;
+    padding: 36px 48px;
+    background: linear-gradient(to top, rgba(0,0,0,0.92), rgba(0,0,0,0));
+    min-height: 200px; max-height: 30vh;
+    display: flex; flex-direction: column; justify-content: center; gap: 8px;
+  }
+  .line { font-size: 32px; line-height: 1.35; text-align: center; transition: color .15s, opacity .15s, font-size .15s; }
+  .line.prev, .line.next { opacity: 0.5; font-size: 22px; }
+  .line.now {
+    color: var(--gold); font-weight: 800; font-size: 44px;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.9), 0 0 24px rgba(255,206,77,0.3);
+  }
+
+  /* HUD：右上角 demucs 狀態 + 全螢幕 + 關閉 */
+  .hud {
+    position: fixed; top: 14px; right: 14px;
+    display: flex; gap: 12px; align-items: center;
+    background: rgba(0,0,0,0.6); padding: 8px 14px; border-radius: 999px;
+    backdrop-filter: blur(8px); font-size: 14px;
+    transition: opacity .3s;
+  }
+  .hud.idle { opacity: 0.3; }
+  .hud:hover { opacity: 1; }
+  .hud button {
+    background: transparent; border: none; color: #fff; cursor: pointer;
+    font-size: 18px; padding: 2px 6px; border-radius: 4px;
+  }
+  .hud button:hover { background: rgba(255,255,255,0.15); }
+  .badge-on  { color: var(--gold); font-weight: 700; }
+  .badge-rdy { color: var(--ok); font-weight: 700; }
+  .badge-bad { color: var(--danger); font-weight: 700; }
+  /* demucs 進度條（hqState===pending 時顯示在 badge 旁） */
+  .pbar { width: 100px; height: 5px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden; }
+  .pbar > div { height: 100%; background: var(--gold); width: 0%; transition: width .3s linear; }
+
+  .hint {
+    position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; opacity: 0.35; pointer-events: none;
+  }
+  .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); display: inline-block; }
+  .conn-dot.live { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+
+  /* 「點擊任意處進入全螢幕」蓋滿整個視窗，直到第一次互動。
+     瀏覽器規定 requestFullscreen 一定要 user gesture，但這層蓋滿讓「任何地方」
+     都會被當成 user gesture，使用者只要動一下就 fullscreen。 */
+  #fs-overlay {
+    position: fixed; inset: 0; z-index: 99999;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+    background: rgba(0,0,0,0.78); backdrop-filter: blur(8px);
+    color: #fff; cursor: pointer;
+    animation: pulse-bg 2s ease-in-out infinite;
+  }
+  #fs-overlay.hidden { display: none; }
+  #fs-overlay .big { font-size: 64px; }
+  #fs-overlay .lbl { font-size: 24px; font-weight: 700; }
+  #fs-overlay .sub { font-size: 14px; opacity: 0.6; }
+  @keyframes pulse-bg {
+    0%, 100% { background: rgba(0,0,0,0.78); }
+    50%      { background: rgba(0,0,0,0.62); }
+  }
+
+  /* 右側欄：下一首 + 接下來歌單 + prefetch 狀態。
+     預設 width=0 不顯示；手機按 📋 或結尾 30s 自動 slide-in 顯示，220px 寬。 */
+  .sidebar {
+    width: 0; flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px);
+    border-left: 1px solid #2a3450;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    transition: width 240ms ease;
+  }
+  .sidebar.show { width: 220px; }
+  .sidebar.show.imminent {
+    /* 結尾 30s 自動跳出時加金色邊框提醒「準備下一首」 */
+    border-left-color: var(--gold);
+    box-shadow: -4px 0 16px rgba(255, 206, 77, 0.15);
+  }
+  .side-title {
+    font-size: 15px; font-weight: 800; color: var(--gold);
+    padding: 12px 14px 6px; letter-spacing: 0.5px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .side-title .sub { font-size: 10px; color: var(--dim); font-weight: 500; letter-spacing: 0; }
+  .side-list { flex: 1; overflow-y: auto; padding: 0 10px 12px; }
+  .up {
+    display: flex; gap: 8px; align-items: center;
+    padding: 6px; margin-bottom: 5px;
+    background: rgba(255, 255, 255, 0.04); border-radius: 6px;
+  }
+  .up.next {
+    background: rgba(255, 206, 77, 0.16);
+    border: 1px solid var(--gold);
+  }
+  .up img {
+    width: 60px; height: 34px; object-fit: cover;
+    border-radius: 4px; flex-shrink: 0; background: #000;
+  }
+  .up .info { flex: 1; min-width: 0; }
+  .up .info .lbl {
+    font-size: 9px; opacity: 0.6; letter-spacing: 0.5px;
+  }
+  .up.next .info .lbl { color: var(--gold); opacity: 1; }
+  .up .info .name {
+    font-size: 11px; line-height: 1.25;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .up.next .info .name { font-size: 12px; font-weight: 700; }
+  .up .info .stat {
+    font-size: 10px; margin-top: 2px; font-weight: 600;
+  }
+  .up .info .stat.ready      { color: var(--ok); }
+  .up .info .stat.processing { color: var(--gold); }
+  .up .info .stat.failed     { color: var(--danger); }
+  .up .info .stat.idle       { color: var(--dim); }
+  .side-empty {
+    color: var(--dim); font-size: 12px; padding: 16px 8px; text-align: center;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="stage-main">
+    <div class="video-area">
+      <video id="video" muted playsinline></video>
+      <div class="placeholder" id="placeholder">
+        <div style="font-size:48px">🎤</div>
+        <div>等待主畫面送來影片…</div>
+      </div>
+    </div>
+    <div class="lyrics-area">
+      <div class="line prev" id="lyrics-prev"></div>
+      <div class="line now" id="lyrics-now">（連線中…）</div>
+      <div class="line next" id="lyrics-next"></div>
+    </div>
+  </div>
+  <div class="sidebar" id="sidebar">
+    <div class="side-title">
+      🎵 接下來
+      <span class="sub" id="side-sub">手機 📋 切換</span>
+    </div>
+    <div class="side-list" id="upcoming">
+      <div class="side-empty">主畫面歌單空了 — 用手機加歌</div>
+    </div>
+  </div>
+</div>
+
+<div class="hud" id="hud">
+  <span class="conn-dot" id="conn" title="主畫面連線狀態"></span>
+  <span id="hq">🎵 三頻段</span>
+  <div class="pbar" id="hq-bar" style="display:none"><div id="hq-fill"></div></div>
+  <button id="btn-fs" title="切換全螢幕（F11 亦可）">⛶</button>
+  <button id="btn-close" title="關閉舞台視窗">✕</button>
+</div>
+
+<!-- 第一次互動就 fullscreen，整層蓋滿整個視窗 -->
+<div id="fs-overlay">
+  <div class="big">📺</div>
+  <div class="lbl">點擊任意處進入全螢幕</div>
+  <div class="sub">或按任意鍵盤鍵 · F11 也行</div>
+</div>
+
+<div class="hint">舞台模式 · ⛶ 全螢幕 · F11 也行 · Esc 退出全螢幕</div>
+
+<script>
+// 與主畫面（dashboard）同網域 → 走 BroadcastChannel 同步狀態與指令。
+const channel = new BroadcastChannel("karaoke-stage");
+const v = document.getElementById("video");
+const placeholder = document.getElementById("placeholder");
+let lyrics = null;
+let lastVideoUrl = "";
+let serverPaused = true;
+let lastMsgTs = 0;
+
+// 側欄顯示狀態
+let manualSidebar = false;   // 手機按 📋 切換
+let autoSidebar = false;     // 結尾 30s 自動跳出
+let upcomingItems = [];
+function refreshSidebar() {
+  const showing = manualSidebar || autoSidebar;
+  const sb = document.getElementById("sidebar");
+  if (!sb) return;
+  sb.classList.toggle("show", showing && upcomingItems.length > 0);
+  sb.classList.toggle("imminent", autoSidebar && !manualSidebar);
+  // 副標籤更新
+  const sub = document.getElementById("side-sub");
+  if (sub) sub.textContent = autoSidebar ? "歌曲快結束了" : "手機 📋 切換";
+}
+
+/**
+ * 防呆：即使 dashboard 端 parser 漏掉某些殘留 markup（VTT cue settings、
+ * enhanced LRC timing tags、HTML-like tags），舞台這裡再清一次，
+ * 確保大字幕上不會出現 "<00:01:57.000><c>就</c>" 或 "align:start position:0%"。
+ */
+function cleanLyricText(s) {
+  if (!s) return "";
+  return String(s)
+    .replace(/<\d{1,2}:\d{1,2}:\d{1,2}\.\d{1,3}>/g, "")        // <HH:MM:SS.mmm> 時間戳
+    .replace(/<[^>]*>/g, "")                                    // 任何 <...> tag
+    .replace(/\b(?:align|position|size|line|vertical):[^\s]+/gi, "")  // VTT cue settings
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function setLyricsAt(ms) {
+  const elN = document.getElementById("lyrics-now");
+  const elP = document.getElementById("lyrics-prev");
+  const elX = document.getElementById("lyrics-next");
+  if (!lyrics || !lyrics.lines || !lyrics.lines.length) {
+    elN.textContent = "🎵 純音樂演奏中…";
+    elP.textContent = ""; elX.textContent = "";
+    return;
+  }
+  // 找 ms 落在哪一行（startMs <= ms < endMs）
+  let idx = -1;
+  for (let i = 0; i < lyrics.lines.length; i++) {
+    const ln = lyrics.lines[i];
+    if (ms >= ln.startMs && ms < ln.endMs) { idx = i; break; }
+    if (ms < ln.startMs) { idx = Math.max(0, i - 1); break; }
+  }
+  if (idx === -1) idx = lyrics.lines.length - 1;
+  const prev = idx > 0 ? lyrics.lines[idx - 1] : null;
+  const now = lyrics.lines[idx];
+  const next = idx + 1 < lyrics.lines.length ? lyrics.lines[idx + 1] : null;
+  elP.textContent = prev ? cleanLyricText(prev.text) : "";
+  elN.textContent = (now && cleanLyricText(now.text)) || "♪";
+  elX.textContent = next ? cleanLyricText(next.text) : "";
+}
+
+function setHq(hqState, hqProgress) {
+  const el = document.getElementById("hq");
+  const bar = document.getElementById("hq-bar");
+  const fill = document.getElementById("hq-fill");
+  el.className = "";
+  if (hqState === "pending") {
+    const pct = (hqProgress && Number(hqProgress.percent)) || 0;
+    const eta = (hqProgress && typeof hqProgress.etaSec === "number")
+      ? " · 剩 " + Math.floor(hqProgress.etaSec / 60) + ":" + String(hqProgress.etaSec % 60).padStart(2, "0") : "";
+    el.textContent = "🤖 " + pct.toFixed(0) + "%" + eta;
+    el.className = "badge-on";
+    bar.style.display = "";
+    fill.style.width = pct + "%";
+  } else if (hqState === "ready") {
+    el.textContent = "✓ 高品質就緒";
+    el.className = "badge-rdy";
+    bar.style.display = "none";
+  } else if (hqState === "failed") {
+    el.textContent = "⚠ 去人聲失敗";
+    el.className = "badge-bad";
+    bar.style.display = "none";
+  } else {
+    el.textContent = "🎵 三頻段";
+    bar.style.display = "none";
+  }
+}
+
+function applySongChange(m) {
+  lyrics = m.lyrics || null;
+  if (m.videoUrl && m.videoUrl !== lastVideoUrl) {
+    lastVideoUrl = m.videoUrl;
+    v.src = m.videoUrl;
+    v.load();
+    placeholder.style.display = "none";
+    // ★ #17A：新 src 載完一定要主動 play（如果 dashboard 在播）★
+    // 舊版只在「paused 狀態變化」那刻 play，src 還沒 ready 時失敗 → 後續位置廣播
+    // 因 paused 沒變不再 retry → v 永遠不播。改成 canplay 一觸發就 play。
+    v.oncanplay = () => {
+      v.oncanplay = null;
+      if (!serverPaused) v.play().catch(() => { /* gesture 不夠 */ });
+    };
+  } else if (!m.videoUrl) {
+    lastVideoUrl = "";
+    v.removeAttribute("src");
+    v.load();
+    placeholder.style.display = "";
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function renderUpcoming(items) {
+  const box = document.getElementById("upcoming");
+  if (!items || !items.length) {
+    box.innerHTML = '<div class="side-empty">主畫面歌單空了 — 用手機加歌</div>';
+    return;
+  }
+  box.innerHTML = "";
+  items.forEach((it, i) => {
+    const el = document.createElement("div");
+    el.className = "up" + (i === 0 ? " next" : "");
+    const status = it.prefetchStatus || "idle";
+    const stat = status === "ready" ? "✓ 已就緒"
+              : status === "processing" ? "🤖 去人聲中…"
+              : status === "failed" ? "⚠ 處理失敗"
+              : "⏳ 排隊中";
+    el.innerHTML =
+      (it.thumbnail ? '<img src="' + it.thumbnail + '" alt="">' : '<img alt="">') +
+      '<div class="info">' +
+        '<div class="lbl">' + (i === 0 ? "👉 下一首" : "第 " + (i + 1) + " 首") + '</div>' +
+        '<div class="name">' + escapeHtml(it.title || it.videoId || "") + '</div>' +
+        '<div class="stat ' + status + '">' + stat + '</div>' +
+      '</div>';
+    box.appendChild(el);
+  });
+}
+
+channel.onmessage = (e) => {
+  const m = e.data || {};
+  lastMsgTs = Date.now();
+  if (m.type === "songChange") {
+    // 收到 songChange 且帶有有效資料（videoUrl 或 lyrics）→ 視為已連上，不再 retry hello
+    if (m.videoUrl || (m.lyrics && m.lyrics.lines && m.lyrics.lines.length)) {
+      songReceived = true;
+    }
+    applySongChange(m);
+    setLyricsAt(m.currentMs || 0);
+  } else if (m.type === "queueInfo") {
+    renderUpcoming(m.upcoming || []);
+    upcomingItems = m.upcoming || [];
+    refreshSidebar();
+  } else if (m.type === "sidebarToggle") {
+    manualSidebar = !manualSidebar;
+    refreshSidebar();
+  } else if (m.type === "position") {
+    const targetSec = (m.currentMs || 0) / 1000;
+    // drift 校正：>300ms 才動，避免每次都跳
+    if (v.duration && Math.abs(v.currentTime - targetSec) > 0.3) v.currentTime = targetSec;
+    if (m.paused !== undefined) {
+      serverPaused = m.paused;
+      // ★ #17A：每次都校正狀態，不要只在「變化」時動 ★
+      // 舊版只在 transition 時 play()，若 v.src 還在 load 失敗就再也不 retry。
+      // 改成「dashboard 在播 + v 暫停就 play」每次都試 → load 完下次 position 就接上。
+      if (m.paused) {
+        if (!v.paused) v.pause();
+      } else {
+        if (v.paused) v.play().catch(() => { /* gesture not granted or src not ready */ });
+      }
+    }
+    setLyricsAt(m.currentMs || 0);
+    // 結尾 30s 偵測 → 自動跳側欄
+    if (m.durationMs && m.durationMs > 0 && m.currentMs) {
+      const remainSec = (m.durationMs - m.currentMs) / 1000;
+      autoSidebar = remainSec > 0 && remainSec < 30;
+    } else {
+      autoSidebar = false;
+    }
+    refreshSidebar();
+  } else if (m.type === "hq") {
+    setHq(m.hqState, m.hqProgress);
+  } else if (m.type === "lyricsVis") {
+    // 字幕區顯示／隱藏（手機遙控可切；亂碼歌詞時很有用）
+    const area = document.querySelector(".lyrics-area");
+    if (area) area.style.display = m.visible === false ? "none" : "";
+  } else if (m.type === "close") {
+    window.close();
+  }
+};
+
+// 通知主畫面我開好了，請推目前狀態（避免要 reload 才有東西看）。
+// 加 retry：如果第一個 hello 在主畫面 handler 還沒準備好時送出（極少見但會發生），
+// 或主畫面剛好處於某種 stale 狀態，重發 hello 救一下。最多 5 次（共 10 秒內）。
+let helloAttempts = 0;
+let songReceived = false;
+function sendHello() {
+  if (songReceived) return;
+  if (helloAttempts >= 5) return;
+  helloAttempts++;
+  channel.postMessage({ type: "hello" });
+  setTimeout(sendHello, 2000);
+}
+sendHello();
+
+// HUD 連線狀態：3 秒沒收到主畫面訊息 → dim
+setInterval(() => {
+  const alive = Date.now() - lastMsgTs < 3000;
+  document.getElementById("conn").classList.toggle("live", alive);
+  document.getElementById("hud").classList.toggle("idle", !alive);
+}, 800);
+
+// 全螢幕切換
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+  } catch (e) { console.warn("fullscreen failed:", e); }
+}
+async function enterFullscreen() {
+  if (document.fullscreenElement) return true;
+  try {
+    await document.documentElement.requestFullscreen();
+    return true;
+  } catch (e) {
+    console.warn("[stage] requestFullscreen rejected:", e?.name || e);
+    return false;
+  }
+}
+
+// fullscreen 狀態變更時 → 進去就藏 overlay，退出時… 不要再把 overlay 顯示出來（很煩）
+document.addEventListener("fullscreenchange", () => {
+  if (document.fullscreenElement) document.getElementById("fs-overlay")?.classList.add("hidden");
+});
+
+document.getElementById("btn-fs").onclick = (e) => { e.stopPropagation(); toggleFullscreen(); };
+document.getElementById("btn-close").onclick = (e) => { e.stopPropagation(); window.close(); };
+window.addEventListener("keydown", (e) => {
+  if (e.key === "F11") { e.preventDefault(); toggleFullscreen(); }
+});
+
+// ★ #17B：PWA standalone mode 偵測。
+// dashboard 裝成 PWA 後從桌面捷徑開啟，window.open 開出來的 stage 視窗會繼承
+// standalone mode → 沒有瀏覽器 chrome（沒 URL bar、沒分頁列、沒書籤列）→
+// 視覺上就接近全螢幕 → 不需要 requestFullscreen API（也就不用 user gesture）。
+// 偵測到的話直接藏掉「點擊任意處進入全螢幕」overlay。
+const isStandalone =
+  window.matchMedia?.("(display-mode: standalone)").matches ||
+  window.matchMedia?.("(display-mode: window-controls-overlay)").matches ||
+  // iOS Safari 用 navigator.standalone
+  /** @type {any} */ (window.navigator).standalone === true;
+
+if (isStandalone) {
+  document.getElementById("fs-overlay")?.classList.add("hidden");
+  const hint = document.querySelector(".hint");
+  if (hint) hint.textContent = "舞台模式（PWA 已裝）· F11 仍可進真．全螢幕 · Esc 退出";
+}
+
+// 第一次互動 → 進入全螢幕 + 啟動影片播放。任何 click / keydown / pointerdown /
+// touchstart 都觸發。每種 event 都當「user gesture」算 → requestFullscreen 必中。
+let firstGestureFired = isStandalone;   // standalone 模式不用再藏 overlay
+async function firstGesture() {
+  if (firstGestureFired) return;
+  firstGestureFired = true;
+  const ok = await enterFullscreen();
+  v.play().catch(() => {});
+  if (ok) document.getElementById("fs-overlay")?.classList.add("hidden");
+  else {
+    // 萬一第一次被擋（極少；如 iframe 限制）→ 重置 flag 讓下一次互動再試一次
+    firstGestureFired = false;
+  }
+}
+window.addEventListener("click", firstGesture, true);
+window.addEventListener("keydown", firstGesture, true);
+window.addEventListener("pointerdown", firstGesture, true);
+window.addEventListener("touchstart", firstGesture, { passive: true, capture: true });
+
+// 也試試 load 時自動全螢幕（如果 opener 的點擊 user activation 還在效期內可能成功）
+window.addEventListener("load", () => {
+  enterFullscreen().then((ok) => {
+    if (ok) {
+      firstGestureFired = true;
+      document.getElementById("fs-overlay")?.classList.add("hidden");
+    }
+  });
+});
+
+// 通知主畫面我即將關閉（讓 dashboard 把 stageMode 收回去）
+window.addEventListener("pagehide", () => {
+  try { channel.postMessage({ type: "bye" }); } catch {}
+});
+</script>
+</body>
+</html>

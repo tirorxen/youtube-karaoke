@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="theme-color" content="#10131a" />
+<title>🎤 卡拉OK 遙控</title>
+<style>
+  :root {
+    --bg: #10131a; --card: #1b2030; --card2: #232a3d;
+    --line: #2e3650; --text: #eef1f8; --dim: #97a0b8;
+    --gold: #ffce4d; --gold-d: #b8902f; --warn: #ff8a3d; --ok: #3ecf8e; --danger: #ff5d6c;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Noto Sans TC", system-ui, sans-serif; }
+  body { padding: 12px 12px 40px; max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 4px 0 12px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); flex: none; }
+  .dot.live { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 12px; }
+  .now { display: flex; gap: 12px; align-items: center; }
+  .now img { width: 96px; height: 54px; object-fit: cover; border-radius: 8px; background: #000; flex: none; }
+  .now .t { font-weight: 700; font-size: 15px; line-height: 1.3; }
+  .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; margin-top: 4px; }
+  .badge.off { background: #2a3147; color: var(--dim); }
+  .badge.pending { background: #4a3a16; color: var(--gold); }
+  .badge.ready { background: #143a2a; color: var(--ok); }
+  .badge.failed { background: #43181d; color: var(--danger); }
+  .row { display: flex; gap: 8px; }
+  .row.wrap { flex-wrap: wrap; }
+  button { font-family: inherit; font-size: 15px; border: none; border-radius: 12px;
+    padding: 13px 10px; color: var(--text); background: var(--card2); cursor: pointer;
+    flex: 1; min-height: 48px; transition: transform .05s, background .12s; }
+  button:active { transform: scale(.96); }
+  button.primary { background: var(--gold); color: #1a1206; font-weight: 700; }
+  button.warn { background: var(--warn); color: #2a1405; font-weight: 700; }
+  button.ghost { background: transparent; border: 1px solid var(--line); }
+  .seg { display: flex; gap: 6px; }
+  .seg button { font-size: 13px; padding: 11px 4px; }
+  .seg button.on { background: var(--gold); color: #1a1206; font-weight: 700; }
+  .seg button .pc { display: block; font-size: 11px; opacity: .7; }
+  .label { font-size: 12px; color: var(--dim); margin: 14px 2px 6px; text-transform: none; }
+  .q { display: flex; align-items: center; gap: 8px; background: var(--card2);
+    border-radius: 10px; padding: 8px; margin-bottom: 6px; }
+  .q .n { width: 20px; text-align: center; color: var(--dim); font-size: 13px; flex: none; }
+  .q img { width: 64px; height: 36px; object-fit: cover; border-radius: 6px; flex: none; background:#000; }
+  .q .qt { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .q .qs { font-size: 11px; }
+  .q .acts { display: flex; gap: 3px; flex: none; }
+  .q .acts button { flex: none; width: 38px; min-height: 38px; padding: 0; font-size: 16px; border-radius: 9px; }
+  .empty { color: var(--dim); text-align: center; padding: 16px; font-size: 13px; }
+  input { flex: 1; font-size: 16px; padding: 12px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--card2); color: var(--text); min-width: 0; }
+  .res { display: flex; align-items: center; gap: 8px; background: var(--card2);
+    border-radius: 10px; padding: 8px; margin-bottom: 6px; }
+  .res img { width: 64px; height: 36px; object-fit: cover; border-radius: 6px; flex: none; background:#000; }
+  .res .rt { flex: 1; min-width: 0; font-size: 13px; }
+  .res .rt .x { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .res .rb { display: flex; flex-direction: column; gap: 4px; flex: none; }
+  .res .rb button { font-size: 12px; padding: 7px 10px; min-height: 0; }
+  .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    background: var(--gold); color: #1a1206; font-weight: 700; padding: 10px 18px;
+    border-radius: 999px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 9; }
+  .toast.show { opacity: 1; }
+
+  /* demucs 進度條：放大、加 % 大字、ready 時綠色慶祝 */
+  .progress { width: 100%; height: 14px; background: #2a3147; border-radius: 7px; overflow: hidden; position: relative; }
+  .progress > div { height: 100%; background: linear-gradient(90deg, var(--gold), #ffb84d); width: 0%; transition: width .3s linear; }
+  .progress.ready > div { background: var(--ok); width: 100% !important; }
+  .progress-text { font-size: 14px; color: var(--text); margin-top: 6px; font-weight: 700; }
+  .progress-text .pct { color: var(--gold); font-size: 16px; }
+  .progress-text.ready .pct { color: var(--ok); }
+  .hint { font-size: 11px; color: var(--dim); margin-top: 4px; }
+
+  /* 樂觀 UI：使用者剛按下、後端還沒確認的「待回應」狀態 → 脈動效果。
+     表示「指令已送，主畫面套用中，不需要再按了」。 */
+  @keyframes ktv-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 206, 77, .65); }
+    50%      { box-shadow: 0 0 0 5px rgba(255, 206, 77, 0); }
+  }
+  .seg button.pending,
+  button.pending { animation: ktv-pulse 1s ease-out infinite; }
+
+  /* skip cooldown：剛按完冷卻 ~1s，視覺上灰掉，避免狂按重複切 */
+  button.cooling { opacity: .55; pointer-events: none; }
+  button.stage-on { background: var(--gold); color: #1a1206; font-weight: 700; }
+
+  /* Spotify 匯入 modal — 全螢幕 wizard，4 階段切換 */
+  .sp-modal { position: fixed; inset: 0; background: var(--bg); z-index: 1000;
+    display: flex; flex-direction: column; }
+  .sp-modal.hidden { display: none; }
+  .sp-header { display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .sp-header h2 { flex: 1; margin: 0; font-size: 17px; }
+  .sp-header button { flex: none; width: 44px; min-height: 36px; padding: 0; }
+  .sp-body { flex: 1; overflow-y: auto; padding: 14px; min-height: 0; }
+  .sp-foot { padding: 10px 14px; border-top: 1px solid var(--line);
+    display: flex; gap: 8px; background: var(--bg); }
+  .sp-hint { font-size: 12px; color: var(--dim); margin-top: 6px; line-height: 1.5; }
+  .sp-err { background: rgba(255,93,108,.15); border: 1px solid var(--danger);
+    color: var(--danger); padding: 10px; border-radius: 8px;
+    font-size: 13px; margin-bottom: 10px; white-space: pre-wrap; }
+  .sp-row { display: flex; gap: 10px; align-items: center;
+    padding: 8px; background: var(--card2); border-radius: 8px;
+    margin-bottom: 6px; cursor: pointer; transition: opacity 120ms; }
+  .sp-row.disabled { opacity: .35; cursor: not-allowed; }
+  .sp-row .cb { width: 22px; height: 22px; flex: none; border-radius: 5px;
+    border: 2px solid var(--line); display: flex; align-items: center;
+    justify-content: center; font-size: 14px; }
+  .sp-row.checked .cb { background: var(--gold); border-color: var(--gold); color: #1a1206; }
+  .sp-row .ti { flex: 1; min-width: 0; }
+  .sp-row .ti .name { font-size: 14px; line-height: 1.3;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sp-row .ti .meta { font-size: 11px; color: var(--dim); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sp-result { display: flex; gap: 10px; align-items: center;
+    padding: 8px; background: var(--card2); border-radius: 8px; margin-bottom: 6px; }
+  .sp-result img { width: 80px; height: 45px; object-fit: cover;
+    border-radius: 4px; flex: none; background: #000; }
+  .sp-result.missing { opacity: .5; }
+  .sp-result .chip { font-size: 10px; padding: 2px 6px; border-radius: 4px;
+    font-weight: 700; }
+  .sp-result .chip.cc { background: rgba(62,207,142,.25); color: var(--ok); }
+  .sp-result .chip.miss { background: rgba(255,93,108,.25); color: var(--danger); }
+  .sp-counter { font-size: 13px; color: var(--dim); padding: 0 0 8px; }
+  .sp-counter b { color: var(--gold); font-size: 16px; }
+  .sp-spinner { width: 36px; height: 36px; border-radius: 50%;
+    border: 3px solid var(--line); border-top-color: var(--gold);
+    animation: spin 1s linear infinite; margin: 24px auto; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <h1><span id="dot" class="dot"></span> 🎤 卡拉OK 遙控</h1>
+
+  <div class="card">
+    <div class="now">
+      <img id="np-thumb" alt="" />
+      <div style="min-width:0; flex:1">
+        <div id="np-title" class="t">（等待主畫面連線…）</div>
+        <span id="np-badge" class="badge off">—</span>
+        <div id="hq-progress-wrap" style="display:none; margin-top:6px;">
+          <div class="progress"><div id="hq-progress-fill"></div></div>
+          <div id="hq-progress-text" class="hint"></div>
+        </div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="btn-back10" class="ghost" title="倒退 10 秒">⏪ -10s</button>
+      <button id="btn-playpause" class="ghost">⏯ 播放/暫停</button>
+      <button id="btn-fwd10" class="ghost" title="快進 10 秒">⏩ +10s</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="btn-restart" class="ghost" title="從頭開始播放">🔄 重頭</button>
+      <button id="btn-skip" class="warn">⏭ 切下一首</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="btn-stage" class="ghost">📺 進入舞台模式</button>
+      <button id="btn-sidebar" class="ghost" title="切換舞台右側「下一首清單」">📋 下一首清單</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="btn-lyrics" class="ghost" title="舞台視窗顯示／隱藏字幕區（撈到亂碼歌詞時用）">
+        📜 字幕：開
+      </button>
+    </div>
+    <div class="label">導唱值（人聲多寡）</div>
+    <div class="seg" id="guide-seg">
+      <button data-v="0">純伴奏<span class="pc">0%</span></button>
+      <button data-v="30">微導唱<span class="pc">30%</span></button>
+      <button data-v="50">半導唱<span class="pc">50%</span></button>
+      <button data-v="70">半伴奏<span class="pc">70%</span></button>
+      <button data-v="100">原唱<span class="pc">100%</span></button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label" style="margin-top:0">📋 歌單（<span id="q-count">0</span>）— 排隊的歌會在背景先去人聲</div>
+    <div id="queue"></div>
+  </div>
+
+  <div class="card">
+    <div class="label" style="margin-top:0">📚 過去歌單（<span id="snap-count">0</span>） — 一鍵還原以前唱過的整批歌</div>
+    <div id="snapshots"></div>
+    <button id="btn-spotify" class="primary" style="margin-top:10px;width:100%">🎶 從 Spotify 公開歌單匯入</button>
+  </div>
+
+  <div class="card">
+    <div class="label" style="margin-top:0">🔍 搜尋 YouTube 加入歌單</div>
+    <div class="row">
+      <input id="search-in" type="search" placeholder="歌手 + 歌名…" enterkeyhint="search" />
+      <button id="search-btn" class="primary" style="flex:none;width:84px">搜尋</button>
+    </div>
+    <div id="results" style="margin-top:8px"></div>
+  </div>
+
+  <!-- Spotify 匯入 wizard 全螢幕 modal -->
+  <div id="sp-modal" class="sp-modal hidden">
+    <div class="sp-header">
+      <h2>🎶 Spotify 歌單匯入</h2>
+      <button id="sp-close" class="ghost">✕</button>
+    </div>
+    <div class="sp-body" id="sp-body">
+      <!-- 4 階段內容由 JS render -->
+    </div>
+    <div class="sp-foot" id="sp-foot">
+      <!-- 各階段的底部按鈕 -->
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+
+// === 樂觀 UI 狀態（hide latency）====================================
+// 使用者按下後 ~1-2s 才會看到 server 確認。期間用「pending」記住他的選擇，
+// 介面立刻反映，避免他以為沒按到、又按一次。
+const PENDING_TTL = 3000;        // 3s 內 server 還沒確認 → 視為失敗，自動回原值
+let lastState = null;
+let pendingGuide = null,  pendingGuideTs  = 0;
+let pendingPaused = null, pendingPausedTs = 0;
+let pendingStage = null,  pendingStageTs  = 0;
+let pendingLyrics = null, pendingLyricsTs = 0;
+let skipCooldownUntil = 0;       // 切歌冷卻時間（避免狂按）
+
+function maybeRevert(pending, ts) {
+  return pending !== null && Date.now() - ts > PENDING_TTL ? null : pending;
+}
+function effectiveGuide(server) {
+  pendingGuide = maybeRevert(pendingGuide, pendingGuideTs);
+  return pendingGuide !== null ? pendingGuide : server;
+}
+function effectivePaused(server) {
+  pendingPaused = maybeRevert(pendingPaused, pendingPausedTs);
+  return pendingPaused !== null ? pendingPaused : server;
+}
+function effectiveStage(server) {
+  pendingStage = maybeRevert(pendingStage, pendingStageTs);
+  return pendingStage !== null ? pendingStage : server;
+}
+function effectiveLyrics(server) {
+  pendingLyrics = maybeRevert(pendingLyrics, pendingLyricsTs);
+  return pendingLyrics !== null ? pendingLyrics : server;
+}
+
+// === 通訊 ============================================================
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1400);
+}
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+async function sendCmd(type, extra) {
+  try {
+    await api("/api/remote/command", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type, ...(extra || {}) }),
+    });
+    setTimeout(pollState, 600);  // 比 1.5s 輪詢更快拿到 server 確認
+  } catch (e) { toast("送出失敗：" + e.message); }
+}
+
+// === Tap 處理（一律先設 pending 立即反映，再送指令）====================
+function tapGuide(v) {
+  pendingGuide = v; pendingGuideTs = Date.now();
+  if (lastState) renderState(lastState);   // 立刻 re-render 反映 optimistic 狀態
+  sendCmd("guide", { value: v });
+}
+function tapPlayPause() {
+  const cur = effectivePaused(lastState ? lastState.paused : true);
+  pendingPaused = !cur; pendingPausedTs = Date.now();
+  if (lastState) renderState(lastState);
+  sendCmd("playpause");
+}
+function tapSkip() {
+  if (Date.now() < skipCooldownUntil) return;   // 冷卻中
+  skipCooldownUntil = Date.now() + 1200;
+  if (lastState) renderState(lastState);
+  toast("切下一首");
+  sendCmd("skip");
+  setTimeout(() => { if (lastState) renderState(lastState); }, 1250);  // 冷卻結束 re-render
+}
+function tapStage() {
+  const cur = effectiveStage(lastState ? lastState.stageMode : false);
+  pendingStage = !cur; pendingStageTs = Date.now();
+  if (lastState) renderState(lastState);
+  sendCmd("stageToggle");
+}
+function tapLyrics() {
+  // server 預設 true，所以 lastState.lyricsVisible undefined 時也當 true
+  const cur = effectiveLyrics(lastState && lastState.lyricsVisible !== false);
+  pendingLyrics = !cur; pendingLyricsTs = Date.now();
+  if (lastState) renderState(lastState);
+  sendCmd("lyricsToggle");
+}
+
+// === 渲染 ============================================================
+function badgeFor(hq) {
+  const map = {
+    off:     ["off",     "🎵 三頻段"],
+    pending: ["pending", "🤖 去人聲處理中…"],
+    ready:   ["ready",   "✓ 高品質就緒"],
+    failed:  ["failed",  "⚠ 去人聲失敗"],
+  };
+  return map[hq] || map.off;
+}
+
+function renderHqProgress(s) {
+  const wrap = $("#hq-progress-wrap");
+  const bar  = wrap.querySelector(".progress");
+  const txt  = $("#hq-progress-text");
+  if (s.hqState === "pending" && s.hqProgress) {
+    wrap.style.display = "";
+    bar.classList.remove("ready");
+    txt.classList.remove("ready");
+    const pct = Number(s.hqProgress.percent) || 0;
+    $("#hq-progress-fill").style.width = pct + "%";
+    const eta = (typeof s.hqProgress.etaSec === "number")
+      ? " · 剩 " + Math.floor(s.hqProgress.etaSec / 60) + ":" + String(s.hqProgress.etaSec % 60).padStart(2, "0")
+      : "";
+    const model = (s.hqProgress.modelN && s.hqProgress.totalModels && s.hqProgress.totalModels > 1)
+      ? "模型 " + s.hqProgress.modelN + "/" + s.hqProgress.totalModels + " · " : "";
+    txt.innerHTML = model + '<span class="pct">' + pct.toFixed(0) + "%</span>" + eta;
+  } else if (s.hqState === "ready") {
+    // 顯示 "100% ✓" 1.5s 慶祝，之後自動隱藏
+    wrap.style.display = "";
+    bar.classList.add("ready");
+    txt.classList.add("ready");
+    txt.innerHTML = '<span class="pct">✓ 100%</span> 高品質就緒';
+    clearTimeout(wrap._hideT);
+    wrap._hideT = setTimeout(() => { if (lastState && lastState.hqState === "ready") wrap.style.display = "none"; }, 2500);
+  } else {
+    wrap.style.display = "none";
+  }
+}
+
+function renderSnapshots(snaps) {
+  $("#snap-count").textContent = snaps.length;
+  const box = $("#snapshots");
+  if (!snaps || !snaps.length) {
+    box.innerHTML = '<div class="empty">還沒有歷史歌單（玩一陣子歌單會自動存「📌 上一次的歌單」）</div>';
+    return;
+  }
+  box.innerHTML = "";
+  snaps.forEach((s) => {
+    const el = document.createElement("div");
+    el.className = "q";
+    el.innerHTML =
+      '<div class="qt"><div style="font-size:14px;font-weight:700">' + escapeHtml(s.name) + '</div>' +
+      '<div style="font-size:11px;color:var(--dim);margin-top:2px">' +
+        s.itemCount + ' 首 · ' + new Date(s.savedTs).toLocaleString("zh-TW",{hour12:false}) +
+      '</div></div>' +
+      '<div class="acts">' +
+        '<button class="primary" data-act="append">＋ 追加</button>' +
+        '<button class="ghost" data-act="replace">↻ 替換</button>' +
+      '</div>';
+    el.querySelector('[data-act=append]').onclick = () => { sendCmd("loadSnapshot", { snapshotId: s.id, mode: "append" }); toast("已追加 " + s.itemCount + " 首"); };
+    el.querySelector('[data-act=replace]').onclick = () => {
+      if (window.confirm('要把目前歌單「替換」成「' + s.name + '」（' + s.itemCount + ' 首）嗎？')) {
+        sendCmd("loadSnapshot", { snapshotId: s.id, mode: "replace" });
+        toast("已替換成 " + s.itemCount + " 首");
+      }
+    };
+    box.appendChild(el);
+  });
+}
+
+function renderQueue(queue) {
+  $("#q-count").textContent = queue.length;
+  const box = $("#queue");
+  if (!queue.length) { box.innerHTML = '<div class="empty">歌單是空的 — 用下面搜尋加歌</div>'; return; }
+  box.innerHTML = "";
+  queue.forEach((it, i) => {
+    const el = document.createElement("div");
+    el.className = "q";
+    el.innerHTML =
+      '<div class="n">' + (i + 1) + '</div>' +
+      (it.thumbnail ? '<img src="' + it.thumbnail + '" alt="">' : '<img alt="">') +
+      '<div class="qt">' + escapeHtml(it.title || it.videoId) + '</div>' +
+      '<div class="acts">' +
+        '<button data-act="up" ' + (i === 0 ? "disabled" : "") + '>▲</button>' +
+        '<button data-act="down" ' + (i === queue.length - 1 ? "disabled" : "") + '>▼</button>' +
+        '<button data-act="play">▶</button>' +
+        '<button data-act="del">✕</button>' +
+      '</div>';
+    el.querySelector('[data-act=up]').onclick = () => sendCmd("moveUp", { index: i });
+    el.querySelector('[data-act=down]').onclick = () => sendCmd("moveDown", { index: i });
+    el.querySelector('[data-act=play]').onclick = () => { sendCmd("playNow", { videoId: it.videoId }); toast("插播：" + (it.title || "")); };
+    el.querySelector('[data-act=del]').onclick = () => sendCmd("removeAt", { index: i });
+    box.appendChild(el);
+  });
+}
+
+function renderState(s) {
+  lastState = s;
+  $("#dot").classList.toggle("live", !!s.updatedTs && (Date.now() - s.updatedTs < 8000));
+
+  // 確認 pending：server 已回報的值 === 使用者剛按的值 → 清掉 pending
+  if (pendingGuide  !== null && s.guideVocalPercent === pendingGuide)  pendingGuide  = null;
+  if (pendingPaused !== null && s.paused          === pendingPaused)   pendingPaused = null;
+  if (pendingStage  !== null && !!s.stageMode      === pendingStage)   pendingStage  = null;
+  if (pendingLyrics !== null && (s.lyricsVisible !== false) === pendingLyrics) pendingLyrics = null;
+
+  // 現在播放
+  const np = s.nowPlaying;
+  $("#np-title").textContent = np ? (np.title || np.videoId) : "（尚未播放 / 主畫面未開）";
+  const thumb = $("#np-thumb");
+  if (np && np.thumbnail) { thumb.src = np.thumbnail; thumb.style.display = ""; }
+  else thumb.style.display = "none";
+
+  const [cls, txt] = badgeFor(s.hqState);
+  const badge = $("#np-badge"); badge.className = "badge " + cls; badge.textContent = txt;
+  renderHqProgress(s);
+
+  // 導唱值 chips：optimistic on/pending
+  const effGuide = effectiveGuide(s.guideVocalPercent);
+  document.querySelectorAll("#guide-seg button").forEach((b) => {
+    const v = Number(b.dataset.v);
+    b.classList.toggle("on", v === effGuide);
+    b.classList.toggle("pending", pendingGuide !== null && v === pendingGuide);
+  });
+
+  // 播放/暫停
+  const effPaused = effectivePaused(s.paused);
+  const pp = $("#btn-playpause");
+  pp.textContent = effPaused ? "▶ 播放" : "⏸ 暫停";
+  pp.classList.toggle("pending", pendingPaused !== null);
+
+  // 切歌冷卻
+  $("#btn-skip").classList.toggle("cooling", Date.now() < skipCooldownUntil);
+
+  // 舞台模式按鈕
+  const effStage = effectiveStage(!!s.stageMode);
+  const stageBtn = $("#btn-stage");
+  stageBtn.textContent = effStage ? "📺 退出舞台模式（電視畫面已展開）" : "📺 進入舞台模式";
+  stageBtn.classList.toggle("stage-on", effStage);
+  stageBtn.classList.toggle("pending", pendingStage !== null);
+
+  // 字幕區顯示／隱藏按鈕（手機可即時切換舞台視窗的字幕）
+  const effLyrics = effectiveLyrics(s.lyricsVisible !== false);
+  const lyricsBtn = $("#btn-lyrics");
+  lyricsBtn.textContent = effLyrics ? "📜 字幕：開" : "📜 字幕：關";
+  lyricsBtn.classList.toggle("stage-on", !effLyrics);   // 關閉時黃色凸顯（提示「目前不顯示」）
+  lyricsBtn.classList.toggle("pending", pendingLyrics !== null);
+
+  renderQueue(s.queue || []);
+  renderSnapshots(s.snapshots || []);
+}
+
+async function pollState() {
+  try { renderState(await api("/api/remote/state")); }
+  catch { $("#dot").classList.remove("live"); }
+}
+
+function renderResults(list) {
+  const box = $("#results");
+  if (!list.length) { box.innerHTML = '<div class="empty">沒有結果</div>'; return; }
+  box.innerHTML = "";
+  list.forEach((r) => {
+    const el = document.createElement("div");
+    el.className = "res";
+    el.innerHTML =
+      (r.thumbnail ? '<img src="' + r.thumbnail + '" alt="">' : '<img alt="">') +
+      '<div class="rt"><div class="x">' + escapeHtml(r.title) + '</div>' +
+        '<div class="x" style="color:var(--dim);font-size:11px">' + escapeHtml(r.channel || "") + '</div></div>' +
+      '<div class="rb">' +
+        '<button class="primary" data-act="add">＋ 加入</button>' +
+        '<button class="ghost" data-act="next">↑ 插播</button>' +
+      '</div>';
+    const item = { videoId: r.videoId, title: r.title, thumbnail: r.thumbnail };
+    el.querySelector('[data-act=add]').onclick = () => { sendCmd("enqueue", { item }); toast("已加入歌單"); };
+    el.querySelector('[data-act=next]').onclick = () => { sendCmd("insertNext", { item }); toast("已插播到最前"); };
+    box.appendChild(el);
+  });
+}
+
+async function doSearch() {
+  const q = $("#search-in").value.trim();
+  if (!q) return;
+  $("#results").innerHTML = '<div class="empty">搜尋中…</div>';
+  try {
+    const d = await api("/api/youtube/search?q=" + encodeURIComponent(q) + "&limit=12");
+    renderResults(d.results || []);
+  } catch (e) { $("#results").innerHTML = '<div class="empty">搜尋失敗：' + e.message + '</div>'; }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ===== Spotify 公開歌單匯入 wizard =====
+// 4 階段：input → picking → matching → done
+// 一次最多匯入 30 首（YT search 平行限 3，30 首約 50-100 秒）。
+const SP_MAX = 30;
+let spPhase = "input";
+let spUrl = "";
+let spTracks = [];
+let spSelected = new Set();
+let spResults = [];
+let spError = null;
+
+function spOpen()  { spPhase="input"; spUrl=""; spTracks=[]; spSelected=new Set(); spResults=[]; spError=null; spRender(); $("#sp-modal").classList.remove("hidden"); }
+function spClose() { $("#sp-modal").classList.add("hidden"); }
+
+function spRender() {
+  const body = $("#sp-body");
+  const foot = $("#sp-foot");
+  const errBox = spError ? '<div class="sp-err">' + escapeHtml(spError) + '</div>' : '';
+
+  if (spPhase === "input") {
+    body.innerHTML = errBox +
+      '<div class="label" style="margin-top:0">公開歌單分享連結（你的 Spotify 帳號分享的）</div>' +
+      '<input id="sp-url" type="url" inputmode="url" placeholder="https://open.spotify.com/playlist/..." style="width:100%" />' +
+      '<div class="sp-hint">' +
+        '※ 不用任何設定 — 直接爬公開歌單的 embed 頁面。<br>' +
+        '歌單必須是「公開」（在 Spotify app → ⋯ → 分享 → Anyone with the link）。<br>' +
+        '抓回來後可勾選想唱的，一次匯入最多 ' + SP_MAX + ' 首。' +
+      '</div>';
+    foot.innerHTML =
+      '<button id="sp-fetch" class="primary" style="flex:1">抓取歌單</button>' +
+      '<button id="sp-cancel" class="ghost" style="flex:none;width:84px">取消</button>';
+    $("#sp-url").value = spUrl;
+    $("#sp-url").oninput = (e) => { spUrl = e.target.value; };
+    $("#sp-fetch").onclick = spFetchPlaylist;
+    $("#sp-cancel").onclick = spClose;
+    return;
+  }
+
+  if (spPhase === "loadingPlaylist") {
+    body.innerHTML = errBox + '<div class="sp-spinner"></div><div style="text-align:center;color:var(--dim)">抓取歌單中…</div>';
+    foot.innerHTML = '';
+    return;
+  }
+
+  if (spPhase === "picking") {
+    let html = '<div class="sp-counter">共 ' + spTracks.length + ' 首 · 已選 <b>' + spSelected.size + '</b> / ' + SP_MAX + '</div>';
+    spTracks.forEach((t, i) => {
+      const checked = spSelected.has(i);
+      const disabled = !checked && spSelected.size >= SP_MAX;
+      html += '<div class="sp-row' + (checked ? ' checked' : '') + (disabled ? ' disabled' : '') + '" data-i="' + i + '">' +
+        '<div class="cb">' + (checked ? '✓' : '') + '</div>' +
+        '<div class="ti">' +
+          '<div class="name">' + escapeHtml(t.title) + '</div>' +
+          '<div class="meta">' + escapeHtml((t.artists || []).join(", ")) + ' · ' +
+            Math.floor(t.durationSec / 60) + ':' + String(t.durationSec % 60).padStart(2, "0") +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    });
+    body.innerHTML = errBox + html;
+    body.querySelectorAll(".sp-row").forEach((row) => {
+      row.onclick = () => {
+        const i = Number(row.dataset.i);
+        const checked = spSelected.has(i);
+        if (!checked && spSelected.size >= SP_MAX) return;
+        if (checked) spSelected.delete(i); else spSelected.add(i);
+        spRender();
+      };
+    });
+    foot.innerHTML =
+      '<button id="sp-all" class="ghost" style="flex:none">全選前 ' + SP_MAX + '</button>' +
+      '<button id="sp-none" class="ghost" style="flex:none">全不選</button>' +
+      '<button id="sp-match" class="primary" style="flex:1">🔍 配對 (' + spSelected.size + ')</button>';
+    $("#sp-all").onclick = () => {
+      spSelected = new Set(spTracks.slice(0, SP_MAX).map((_, i) => i));
+      spRender();
+    };
+    $("#sp-none").onclick = () => { spSelected = new Set(); spRender(); };
+    $("#sp-match").disabled = spSelected.size === 0;
+    $("#sp-match").onclick = spDoMatch;
+    return;
+  }
+
+  if (spPhase === "matching") {
+    body.innerHTML =
+      '<div class="sp-spinner"></div>' +
+      '<div style="text-align:center">正在到 YouTube 配對 ' + spSelected.size + ' 首…</div>' +
+      '<div class="sp-hint" style="text-align:center">每首 5-10 秒（平行 3 個）<br>' + spSelected.size + ' 首大約 ' + (spSelected.size * 4) + '-' + (spSelected.size * 8) + ' 秒</div>';
+    foot.innerHTML = '';
+    return;
+  }
+
+  if (spPhase === "done") {
+    const found = spResults.filter((r) => r.videoId).length;
+    let html = '<div class="sp-counter">配對完成。<b>' + found + '</b> / ' + spResults.length + ' 首找到 YT 對應</div>';
+    spResults.forEach((r) => {
+      const cls = r.videoId ? '' : ' missing';
+      const thumb = r.thumbnail ? '<img src="' + r.thumbnail + '" alt="">' : '<img alt="">';
+      const chip = r.hasCaptions ? '<span class="chip cc">CC</span>' :
+                   (!r.videoId ? '<span class="chip miss">未找到</span>' : '');
+      html += '<div class="sp-result' + cls + '">' + thumb +
+        '<div class="ti">' +
+          '<div class="name" style="font-size:13px">' + escapeHtml(r.title || r.spotifyTitle) + '</div>' +
+          '<div class="meta" style="font-size:11px;color:var(--dim);margin-top:2px">' +
+            escapeHtml(r.spotifyTitle) + ' ' + chip +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    });
+    body.innerHTML = html;
+    foot.innerHTML =
+      '<button id="sp-back" class="ghost" style="flex:none">← 重選</button>' +
+      '<button id="sp-add" class="primary" style="flex:1">＋ 全部加入歌單 (' + found + ')</button>';
+    $("#sp-back").onclick = () => { spPhase = "picking"; spRender(); };
+    $("#sp-add").onclick = spAddAll;
+    return;
+  }
+}
+
+async function spFetchPlaylist() {
+  if (!spUrl.trim()) return;
+  spPhase = "loadingPlaylist"; spError = null; spRender();
+  try {
+    const r = await fetch("/api/spotify/playlist?url=" + encodeURIComponent(spUrl.trim()));
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+    spTracks = j.tracks || [];
+    spSelected = new Set(spTracks.slice(0, SP_MAX).map((_, i) => i));
+    spPhase = "picking"; spRender();
+  } catch (e) {
+    spError = String(e.message || e); spPhase = "input"; spRender();
+  }
+}
+
+async function spDoMatch() {
+  const picked = [...spSelected].sort((a, b) => a - b).map((i) => spTracks[i]).filter(Boolean);
+  if (!picked.length) return;
+  spPhase = "matching"; spError = null; spRender();
+  try {
+    const r = await fetch("/api/spotify/match-yt", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tracks: picked }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+    spResults = j.results || [];
+    spPhase = "done"; spRender();
+  } catch (e) {
+    spError = String(e.message || e); spPhase = "picking"; spRender();
+  }
+}
+
+function spAddAll() {
+  const items = spResults
+    .filter((r) => r.videoId)
+    .map((r) => ({ videoId: r.videoId, title: r.title || r.spotifyTitle, thumbnail: r.thumbnail || null }));
+  if (!items.length) { toast("沒有可加入的項目"); return; }
+  sendCmd("enqueueBatch", { items });
+  toast("已送 " + items.length + " 首到歌單");
+  spClose();
+}
+
+// 綁定
+document.querySelectorAll("#guide-seg button").forEach((b) => {
+  b.onclick = () => tapGuide(Number(b.dataset.v));
+});
+$("#btn-skip").onclick = tapSkip;
+$("#btn-playpause").onclick = tapPlayPause;
+$("#btn-stage").onclick = tapStage;
+$("#btn-lyrics").onclick = tapLyrics;
+// 快進 / 倒退：直接送 seekRelative；不需 optimistic UI（位置由主畫面 audio 主導），
+// 但加個 short visual flash 讓使用者知道有按到。
+function flashBtn(el) {
+  el.classList.add("pending");
+  setTimeout(() => el.classList.remove("pending"), 350);
+}
+$("#btn-back10").onclick = (e) => { sendCmd("seekRelative", { seconds: -10 }); flashBtn(e.currentTarget); };
+$("#btn-fwd10").onclick  = (e) => { sendCmd("seekRelative", { seconds: 10  }); flashBtn(e.currentTarget); };
+$("#btn-restart").onclick = (e) => { sendCmd("restart"); toast("從頭開始"); flashBtn(e.currentTarget); };
+$("#btn-sidebar").onclick = (e) => { sendCmd("sidebarToggle"); toast("切換下一首清單"); flashBtn(e.currentTarget); };
+$("#btn-spotify").onclick = spOpen;
+$("#sp-close").onclick = spClose;
+$("#search-btn").onclick = doSearch;
+$("#search-in").addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+
+pollState();
+setInterval(pollState, 1500);
+</script>
+</body>
+</html>
