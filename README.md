@@ -304,20 +304,6 @@ youtube-karaoke/
     └── .env.example
 ```
 
----
-
-## 🚫 為什麼放棄 Google Play 上架？
-
-原本計畫做 Google TV App（`app/` `audio-dsp/` 等 Kotlin/NDK module），但實作後評估：
-
-- **demucs 太吃運算**：手機/平板/Google TV box 跑 ML 推論超慢，UX 會崩
-- **YT TOS**：`yt-dlp` 抽串流違反條款，無法商業上架
-- **PWA 已夠**：筆電 + Web Audio + 本地 backend 就能完成 KTV 體驗，**還比原本 Android 計畫好用**
-
-→ Android / Python 原型已撤掉，完整功能都在 `react_prototype/`。
-
----
-
 ## 🤝 貢獻
 
 歡迎 issue / PR。重要原則：
